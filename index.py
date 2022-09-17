@@ -3,15 +3,19 @@ import mediapipe as mp
 import mouse
 import keyboard
 import time 
+import math
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_hands = mp.solutions.hands
 
-wristPos = 0
-sensitivity = 250
-zoomCenteHandDistance = 0.55
+IndexPos = None
+sensitivity = 500
+verticalSensitivity = 150
+handDistancePos = None
 handsDistance = None
+zoomSensitivity = 50
+
 
 cap = cv2.VideoCapture(0)
 with mp_hands.Hands(
@@ -40,30 +44,40 @@ with mp_hands.Hands(
             mp_hands.HAND_CONNECTIONS,
             mp_drawing_styles.get_default_hand_landmarks_style(),
             mp_drawing_styles.get_default_hand_connections_style())
-      #detect wrist
-      if results.multi_hand_landmarks[0]:
-        if wristPos: 
-          deltaX = results.multi_hand_landmarks[0].landmark[0].x - wristPos[0].x
-          deltaY = results.multi_hand_landmarks[0].landmark[0].y - wristPos[0].y
-          mouse.move(-deltaX*sensitivity, deltaY*sensitivity, absolute=False, duration=0.01)
+
+
+      if len(results.multi_handedness)==2: #ZOOM MODE 
+        thumbIndexDistance = math.sqrt(pow(results.multi_hand_landmarks[0].landmark[8].x - results.multi_hand_landmarks[0].landmark[4].x, 2)+pow(results.multi_hand_landmarks[0].landmark[8].x - results.multi_hand_landmarks[0].landmark[4].x, 2))
+        if thumbIndexDistance > 0 and thumbIndexDistance < 0.01:
+          handsDistance = math.sqrt(pow(results.multi_hand_landmarks[1].landmark[4].x - results.multi_hand_landmarks[0].landmark[4].x, 2) + pow(results.multi_hand_landmarks[1].landmark[4].y - results.multi_hand_landmarks[0].landmark[4].y, 2))
+          if handDistancePos: 
+            deltaHandsDistance = handsDistance - handDistancePos
+            mouse.wheel(-deltaHandsDistance*zoomSensitivity)
+          else: 
+            keyboard.release('shift')
+            IndexPos = None
+          handDistancePos = handsDistance
+      elif results.multi_hand_landmarks[0]: #ROTATE MODE 
+        if IndexPos: 
+          landMarks = results.multi_hand_landmarks[0]
+          #rotating 
+          deltaX = (landMarks.landmark[8].x-landMarks.landmark[0].x) - (IndexPos.landmark[8].x-IndexPos.landmark[0].x)
+          deltaY = (landMarks.landmark[8].y-landMarks.landmark[0].y) - (IndexPos.landmark[8].y-IndexPos.landmark[0].y)
+          deltaXY = math.sqrt(pow(deltaX, 2)+pow(deltaY, 2))*(deltaX/abs(deltaX))
+          mouse.move(-deltaXY*sensitivity, 0, absolute=False, duration=0.01)
+          #rotating up and down
+          WristDeltaY = landMarks.landmark[0].y - IndexPos.landmark[0].y
+          mouse.move(0, WristDeltaY*verticalSensitivity, absolute=False, duration=0.01)
         else: 
           keyboard.press('shift')
           mouse.press('middle')
-        wristPos = results.multi_hand_landmarks[0].landmark
-      if len(results.multi_handedness)==2:
-        handsDistance = results.multi_hand_landmarks[0].landmark[20].x - results.multi_hand_landmarks[1].landmark[20].x
-        zoomNeeded = handsDistance - zoomCenteHandDistance
-        keyboard.release('shift')
-        mouse.wheel(zoomNeeded)
-        keyboard.press('shift')
-        print(handsDistance)
-    else: 
-      mouse.release('middle')
-      keyboard.release('shift')
-      wristPos = 0
-        #time.sleep(0.25)
+          handDistancePos = None
+        IndexPos = results.multi_hand_landmarks[0]
+    
     
     cv2.imshow('MediaPipe Hands', cv2.flip(image, 1))
     if cv2.waitKey(5) & 0xFF == 27:
+      mouse.release('middle')
+      mouse.release('shift')
       break
 cap.release()
