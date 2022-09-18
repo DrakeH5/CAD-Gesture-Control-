@@ -1,9 +1,11 @@
 import cv2
+import cv2
 import mediapipe as mp
 import mouse
 import keyboard
 import time 
 import math
+from win32api import GetSystemMetrics
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -15,13 +17,16 @@ verticalSensitivity = 150
 handDistancePos = None
 handsDistance = None
 zoomSensitivity = 50
+throwThresholdX = 0.15
+throwThresholdY = 0.12
+throwDurationMultiplier = 10
 
 
 cap = cv2.VideoCapture(0)
 with mp_hands.Hands(
     model_complexity=0,
     min_detection_confidence=0.5,
-    min_tracking_confidence=0.5) as hands:
+    min_tracking_confidence=0.2) as hands:
   while cap.isOpened():
     success, image = cap.read()
     if not success:
@@ -57,22 +62,55 @@ with mp_hands.Hands(
             keyboard.release('shift')
             IndexPos = None
           handDistancePos = handsDistance
+
       elif results.multi_hand_landmarks[0]: #ROTATE MODE 
         if IndexPos: 
           landMarks = results.multi_hand_landmarks[0]
-          #rotating 
-          deltaX = (landMarks.landmark[8].x-landMarks.landmark[0].x) - (IndexPos.landmark[8].x-IndexPos.landmark[0].x)
-          deltaY = (landMarks.landmark[8].y-landMarks.landmark[0].y) - (IndexPos.landmark[8].y-IndexPos.landmark[0].y)
-          deltaXY = math.sqrt(pow(deltaX, 2)+pow(deltaY, 2))*(deltaX/abs(deltaX))
-          mouse.move(-deltaXY*sensitivity, 0, absolute=False, duration=0.01)
-          #rotating up and down
-          WristDeltaY = landMarks.landmark[0].y - IndexPos.landmark[0].y
-          mouse.move(0, WristDeltaY*verticalSensitivity, absolute=False, duration=0.01)
+
+          if landMarks.landmark[0].x-IndexPos.landmark[0].x > throwThresholdX: #thow X axis 
+            keyboard.release('shift')
+            mouse.release('middle')
+            mouse.move(GetSystemMetrics(0), GetSystemMetrics(1)/2, absolute=True, duration=0)
+            keyboard.press('shift')
+            mouse.press('middle')
+            mouse.move(0, GetSystemMetrics(1)/2, absolute=True, duration=abs(landMarks.landmark[0].x-IndexPos.landmark[0].x)*throwDurationMultiplier)
+            mouse.move(GetSystemMetrics(0)/2, GetSystemMetrics(1)/2, absolute=True, duration=0)
+            IndexPos = None
+          elif landMarks.landmark[0].y-IndexPos.landmark[0].y > throwThresholdY: #throw y axis
+            keyboard.release('shift')
+            mouse.release('middle')
+            mouse.move(GetSystemMetrics(0)/2, GetSystemMetrics(1)/2, absolute=True, duration=0)
+            keyboard.press('shift')
+            mouse.press('middle')
+            mouse.move(GetSystemMetrics(0)/2, 0, absolute=True, duration=abs(landMarks.landmark[0].x-IndexPos.landmark[0].x)*(throwDurationMultiplier/2))
+            keyboard.release('shift')
+            mouse.release('middle')
+            mouse.move(GetSystemMetrics(0)/2, GetSystemMetrics(1)/2, absolute=True, duration=0)
+            keyboard.press('shift')
+            mouse.press('middle')
+            mouse.move(GetSystemMetrics(0)/2, 0, absolute=True, duration=abs(landMarks.landmark[0].x-IndexPos.landmark[0].x)*(throwDurationMultiplier/2))
+            mouse.move(GetSystemMetrics(0)/2, GetSystemMetrics(1)/2, absolute=True, duration=0)
+            IndexPos = None
+          
+          else: 
+            deltaX = (landMarks.landmark[8].x-landMarks.landmark[0].x) - (IndexPos.landmark[8].x-IndexPos.landmark[0].x)
+            deltaY = (landMarks.landmark[8].y-landMarks.landmark[0].y) - (IndexPos.landmark[8].y-IndexPos.landmark[0].y)
+            #rotating 
+            deltaXY = math.sqrt(pow(deltaX, 2)+pow(deltaY, 2))*(deltaX/abs(deltaX))
+            mouse.move(-deltaXY*sensitivity, 0, absolute=False, duration=0.01)
+            #rotating up and down
+            WristDeltaY = landMarks.landmark[0].y - IndexPos.landmark[0].y
+            mouse.move(0, WristDeltaY*verticalSensitivity, absolute=False, duration=0.01)
+        
         else: 
           keyboard.press('shift')
           mouse.press('middle')
           handDistancePos = None
         IndexPos = results.multi_hand_landmarks[0]
+      
+      elif len(results.multi_handedness)==0: 
+        IndexPos = None
+        handDistancePos = None
     
     
     cv2.imshow('MediaPipe Hands', cv2.flip(image, 1))
