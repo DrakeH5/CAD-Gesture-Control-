@@ -8,3 +8,4 @@ Controls:
     Rotating hand rotates the model from a top down perspective;
     Moving hand vertical controls the verticle rotation;
     Moving both hands while pinching index finger and thumb together zooms in/out;
+    Move hand quickly to trow object (rotate it in a presentation)
