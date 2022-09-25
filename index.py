@@ -3,23 +3,25 @@ import cv2
 import mediapipe as mp
 import mouse
 import keyboard
-import time 
 import math
 from win32api import GetSystemMetrics
+from datetime import datetime
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_hands = mp.solutions.hands
 
 IndexPos = None
-sensitivity = 500
+sensitivity = 100
 verticalSensitivity = 150
 handDistancePos = None
 handsDistance = None
 zoomSensitivity = 50
-throwThresholdX = 0.15
-throwThresholdY = 0.12
-throwDurationMultiplier = 10
+throwThresholdX = 0.1
+throwThresholdY = 0.1
+throwDurationMultiplier = 20
+startTime=datetime.now()
+targetDeltaTimeMultiplier=20
 
 
 cap = cv2.VideoCapture(0)
@@ -51,12 +53,18 @@ with mp_hands.Hands(
             mp_drawing_styles.get_default_hand_connections_style())
 
 
+      deltaTime=(datetime.now()-startTime).total_seconds() * targetDeltaTimeMultiplier
+      startTime=datetime.now()
+      print(deltaTime)
+      if deltaTime>targetDeltaTimeMultiplier:
+        deltaTime=0
+
       if len(results.multi_handedness)==2: #ZOOM MODE 
         thumbIndexDistance = math.sqrt(pow(results.multi_hand_landmarks[0].landmark[8].x - results.multi_hand_landmarks[0].landmark[4].x, 2)+pow(results.multi_hand_landmarks[0].landmark[8].x - results.multi_hand_landmarks[0].landmark[4].x, 2))
         if thumbIndexDistance > 0 and thumbIndexDistance < 0.01:
           handsDistance = math.sqrt(pow(results.multi_hand_landmarks[1].landmark[4].x - results.multi_hand_landmarks[0].landmark[4].x, 2) + pow(results.multi_hand_landmarks[1].landmark[4].y - results.multi_hand_landmarks[0].landmark[4].y, 2))
           if handDistancePos: 
-            deltaHandsDistance = handsDistance - handDistancePos
+            deltaHandsDistance = (handsDistance - handDistancePos)*deltaTime
             mouse.wheel(-deltaHandsDistance*zoomSensitivity)
           else: 
             keyboard.release('shift')
@@ -64,31 +72,31 @@ with mp_hands.Hands(
           handDistancePos = handsDistance
 
       elif results.multi_hand_landmarks[0]: #ROTATE MODE 
-        if IndexPos: 
+        if IndexPos and deltaTime: 
           landMarks = results.multi_hand_landmarks[0]
 
-          if landMarks.landmark[0].x-IndexPos.landmark[0].x > throwThresholdX: #thow X axis 
+          if (landMarks.landmark[0].x-IndexPos.landmark[0].x)/deltaTime > throwThresholdX: #thow X axis 
             keyboard.release('shift')
             mouse.release('middle')
             mouse.move(GetSystemMetrics(0), GetSystemMetrics(1)/2, absolute=True, duration=0)
             keyboard.press('shift')
             mouse.press('middle')
-            mouse.move(0, GetSystemMetrics(1)/2, absolute=True, duration=abs(landMarks.landmark[0].x-IndexPos.landmark[0].x)*throwDurationMultiplier)
+            mouse.move(0, GetSystemMetrics(1)/2, absolute=True, duration=(abs(landMarks.landmark[0].x-IndexPos.landmark[0].x)*throwDurationMultiplier)*deltaTime)
             mouse.move(GetSystemMetrics(0)/2, GetSystemMetrics(1)/2, absolute=True, duration=0)
             IndexPos = None
-          elif landMarks.landmark[0].y-IndexPos.landmark[0].y > throwThresholdY: #throw y axis
+          elif (landMarks.landmark[0].y-IndexPos.landmark[0].y)/deltaTime > throwThresholdY: #throw y axis
             keyboard.release('shift')
             mouse.release('middle')
             mouse.move(GetSystemMetrics(0)/2, GetSystemMetrics(1)/2, absolute=True, duration=0)
             keyboard.press('shift')
             mouse.press('middle')
-            mouse.move(GetSystemMetrics(0)/2, 0, absolute=True, duration=abs(landMarks.landmark[0].x-IndexPos.landmark[0].x)*(throwDurationMultiplier/2))
+            mouse.move(GetSystemMetrics(0)/2, 0, absolute=True, duration=(abs(landMarks.landmark[0].x-IndexPos.landmark[0].x)*(throwDurationMultiplier/2))*deltaTime)
             keyboard.release('shift')
             mouse.release('middle')
             mouse.move(GetSystemMetrics(0)/2, GetSystemMetrics(1)/2, absolute=True, duration=0)
             keyboard.press('shift')
             mouse.press('middle')
-            mouse.move(GetSystemMetrics(0)/2, 0, absolute=True, duration=abs(landMarks.landmark[0].x-IndexPos.landmark[0].x)*(throwDurationMultiplier/2))
+            mouse.move(GetSystemMetrics(0)/2, 0, absolute=True, duration=(abs(landMarks.landmark[0].x-IndexPos.landmark[0].x)*(throwDurationMultiplier/2))*deltaTime)
             mouse.move(GetSystemMetrics(0)/2, GetSystemMetrics(1)/2, absolute=True, duration=0)
             IndexPos = None
           
@@ -96,10 +104,10 @@ with mp_hands.Hands(
             deltaX = (landMarks.landmark[8].x-landMarks.landmark[0].x) - (IndexPos.landmark[8].x-IndexPos.landmark[0].x)
             deltaY = (landMarks.landmark[8].y-landMarks.landmark[0].y) - (IndexPos.landmark[8].y-IndexPos.landmark[0].y)
             #rotating 
-            deltaXY = math.sqrt(pow(deltaX, 2)+pow(deltaY, 2))*(deltaX/abs(deltaX))
+            deltaXY = (math.sqrt(pow(deltaX, 2)+pow(deltaY, 2))*(deltaX/abs(deltaX)))*deltaTime
             mouse.move(-deltaXY*sensitivity, 0, absolute=False, duration=0.01)
             #rotating up and down
-            WristDeltaY = landMarks.landmark[0].y - IndexPos.landmark[0].y
+            WristDeltaY = (landMarks.landmark[0].y - IndexPos.landmark[0].y)*deltaTime
             mouse.move(0, WristDeltaY*verticalSensitivity, absolute=False, duration=0.01)
         
         else: 
